@@ -1,59 +1,115 @@
-# TTSCeleb
+# EchoCraft
 
-![TTSCeleb Page](./TTSCelebApp.png)
+A Streamlit web app for zero-shot voice cloning. Upload a short voice sample, give it a name, type any text, and EchoCraft generates speech in that voice using the **Tortoise TTS** model.
 
-This is a text-to-speech project where I create a simple web app to allow people to clone the voices of various popular figures, including (but not limited to):
+## Features
 
-- Barack Obama
+- **Voice cloning from a short clip.** Upload a WAV or MP3 sample (10+ seconds recommended) to create a reusable voice profile.
+- **Voice library.** Save multiple voices with names and optional profile pictures, then pick one from a list.
+- **Automatic audio preparation.** Samples are resampled to 22.05 kHz and split into roughly 6-second chunks, the clip length Tortoise works best with.
+- **Conditioning latents.** Each voice is encoded once into Tortoise conditioning latents and reused for every generation, so there's no repeated processing.
+- **Quality presets.** Trade speed for quality with `ultra_fast`, `fast`, `standard`, or `high_quality`.
+- **In-browser playback** of the generated audio.
+- **Half-precision inference** to reduce GPU memory use.
 
-- Donald Trump
+## Tech Stack
 
-- Ben Shapiro
+| Layer | Technology |
+|---|---|
+| Interface | Streamlit |
+| TTS model | Tortoise TTS (autoregressive and diffusion decoder) |
+| Deep learning | PyTorch, torchaudio |
+| Audio processing | librosa, soundfile |
+| Utilities | Pillow, sortedcontainers |
 
-This README will serve as both a description of the project, and a high level tutorial of how to reproduce it. Though, for a more comprehensive view of the concepts presented here, I would encourage readers to consult the References section at the end of this README, where I have provided sources I used to make this project.
+## How It Works
 
-We will first describe the task and how the text-to-speech pipeline works, and then move on to the structure of the app.
+1. **Upload.** The user uploads a reference recording and names the voice.
+2. **Preprocess.** The audio is loaded at 22.05 kHz and split into 6-second chunks.
+3. **Encode.** Tortoise turns the chunks into conditioning latents that capture the speaker's voice.
+4. **Store.** The latents are saved in the voice library, along with the name and picture.
+5. **Generate.** The user selects a voice, enters text and picks a preset. Tortoise then generates speech conditioned on that voice's latents.
 
-# Detailed Task Description
+## Quality Presets
 
-The task is to clone the voices of a popular person (such as Barack Obama) given an audio recording of the person. It is preferable that the voice not only be recognizable for a given person, but also have tonal depth and non verbal sounds such as laughing and screaming.
+| Preset | Quality | Speed |
+|---|---|---|
+| `ultra_fast` | Low | Fastest |
+| `fast` | Decent | Fast, good for bulk generation |
+| `standard` | Very good | Slow |
+| `high_quality` | Best | Very slow |
 
-# Ethics DIsclaimer
+## Installation
 
-Of course, voice cloning technology can be used for malicious purposes, such as misinformation. I don't claim any responsibility over any individual who chooses to use this for illegal or morally dubious purposes. The world is already chaotic enough as is; let's not make it worse.
+A **CUDA GPU** is strongly recommended. Tortoise is very slow on CPU.
 
-# Dataset
+**1. Clone the repository**
 
-We will be using audio recordings of various famous individuals [1]. These recordings contain little to no background noise and others speaking, ensuring our ground truth for training is high quality.
+```bash
+git clone https://github.com/zaynnmotiwala/echocraft.git
+cd echocraft
+```
 
-# Model Selection
+**2. Create an environment (Python 3.10 or 3.11)**
 
-Before telling you which model I selected and why, I will first detail other alternatives and why I ultimately chose not to use them.
+```bash
+python -m venv venv
+venv\Scripts\activate          # macOS/Linux: source venv/bin/activate
+```
 
-I started at the Bark text to audio generative model in the hopes of learning how to clone with it [2]. Unfortunately, there were various complications. I was fortunate to find a user called GitMylo had created a ![way](https://github.com/gitmylo/bark-voice-cloning-HuBERT-quantizer) to clone voices with Bark using a quantizer based on HuBERT [3], but it did not produce very high quality clones (whether this was due to Bark's quality or his model specifically, I am unsure). So I decided to study his pipeline and see if I could use pretrained models to improve on it.
+**3. Install the dependencies**
 
-Here is a sample recording produced by GitMylo's method which is meant to clone Joe Biden:
+```bash
+pip install -r requirements.txt
+```
 
-![Biden Recording](./biden_mylo_clone.mp4)
+> `requirements.txt` pins `torch==2.0.1+cu117`. If your CUDA version is different, install PyTorch first from [pytorch.org](https://pytorch.org/get-started/locally/), then install the rest.
 
-While it isn't terrible, I wouldn't say it would be recognizable as Joe Biden.
+The Tortoise model weights download automatically on the first run.
 
-Though, what Mylo did provide me was a starting point. I had to generate 3 things; a semantic prompt (whatever that meant), a fine representation and a coarse representation. To do these things, I needed an audio encoder and an acoustic tokenizer (or so I thought). For an encoder, I found Encodec by Meta AI, which had been seen to do a decent job at neural audio compression from their experiments [4]. For the tokenizer, I tried BEATs, a model developed by Microsoft Research Asia for audio embedding and tokenization.
+## Usage
 
-However, this had its own problems; BEATs was too large to fit on even Colab's 15 GB VRAM GPUs, so it was out the door. Furthermore, I discovered later on that you shouldn't use a tokenizer for Bark's semantic prompts (despite the fact GitMylo's model was named CustomTokenizer), and that what you needed was a quantizer. In addition, there were specific restrictions in place for generating voice clones that were difficult to untangle, and Bark has no documentation on how to voice clone (which is intentional according to them).
+```bash
+streamlit run main.py
+```
 
-With all of these difficulties, I decided to try my luck on other models. I eventually found a model called Tortoise, a TTS model developed by an OpenAI employee called neonbjb [6]. His repo had what I needed; voice cloning capabilities, flexible configuration, simple API, no restrictions. And with some of the samples I had seen on websites, it seemed like a good quality model. So it is ultimately the one I chose for this project.
+Open **http://localhost:8501**, then:
 
-# References
+1. **Add a voice.** Enter a name, upload a reference clip and, optionally, a profile picture. Then click **Add Voice**.
+2. **Select the voice** from the voice list.
+3. **Enter the text** you want to generate.
+4. **Choose a preset.** `fast` is a good place to start.
+5. Click **Generate Audio** and play the result.
 
-[1] https://www.kaggle.com/datasets/verracodeguacas/voices
+### Tips for better clones
 
-[2] https://github.com/suno-ai/bark
+- Use clean recordings with **one speaker**, **no background music**, and minimal noise.
+- 10–30 seconds of reference audio usually gives good results.
+- Short sentences generate faster and sound more natural.
 
-[3] HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units: https://arxiv.org/abs/2106.07447
+## Project Structure
 
-[4] High Fidelity Neural Audio Compression: https://arxiv.org/abs/2210.13438
+```text
+├── main.py                # Streamlit UI (voice library, text input, presets, playback)
+├── voice_management.py    # Voice and VoiceManager classes, audio preprocessing, Tortoise inference
+├── backend.py             # Streamlit session-state and selector helpers
+├── questionmark.png       # Default profile picture
+├── voicedata/             # Sample reference recordings
+└── requirements.txt
+```
 
-[5] BEATS: Audio Pre-Training with Acoustic Tokenizers: https://arxiv.org/pdf/2212.09058.pdf
+## Known Limitations
 
-[6] Tortoise TTS repo: https://github.com/neonbjb/tortoise-tts
+- **Voices are stored per session.** The voice library is kept in memory and resets when the app restarts.
+- **Generation is slow.** `standard` and `high_quality` can take several minutes per sentence, even on a GPU.
+- **The default image path is hardcoded.** `voice_management.py` loads `drive/MyDrive/questionmark.png`, a Google Colab path. Change it to `questionmark.png` when running locally.
+- **The "Delete Voice" button is not wired up yet.**
+
+## Roadmap
+
+- [ ] Save voice profiles to disk
+- [ ] Working voice deletion
+- [ ] Download button for generated audio
+- [ ] Long-text generation with automatic sentence splitting
+- [ ] Docker image
+
